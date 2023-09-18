@@ -7,32 +7,37 @@ app = FastAPI()
 origins = [
     "http://localhost",
     "http://localhost:3000",
+    "http://localhost:8001",
 ]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=["*"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
+def post_return_search_results(request):
+    the_response = requests.post('http://localhost:9200/_search/', data=json.dumps(request), 
+                                 headers={'Content-Type': 'application/json'}).text
+    return json.loads(the_response)
+
+def get_one_search_result(request):
+    the_response = post_return_search_results(request)
+    return the_response.get('hits').get('hits')[0].get('_source')
+
+def get_many_search_results(request):
+    the_response = post_return_search_results(request)
+    return the_response.get('hits').get('hits')
+
 @app.post("/movies/_search")
 async def movies(request: dict):
-    the_response = requests.post('http://localhost:9200/_search/', data=json.dumps(request), 
-                                          headers={'Content-Type': 'application/json'}).text
-    # print(f'the response was {the_response}')
-    # print('the response type is', type(the_response))
-    # print(f'the response dumps type is  {type(json.dumps(the_response))}')
-    # print(f'the response load type is  {type(json.load(the_response))}')
-    # print(f'the response loads type is  {type(json.loads(the_response))}')
-    return json.loads(the_response)
+    return post_return_search_results(request)
 
 @app.get("/movies/_search")
 async def movies(request: dict):
-    the_response = requests.post('http://localhost:9200/_search/', data=json.dumps(request), 
-                                          headers={'Content-Type': 'application/json'}).text
-    return json.loads(the_response)
+    return post_return_search_results(request)
 
 @app.get("/movies/{id}")
 async def movies(id: int):
@@ -43,8 +48,49 @@ async def movies(id: int):
             }
         }
     }
-    the_response = requests.post('http://localhost:9200/_search/', data=json.dumps(data), 
-                                          headers={'Content-Type': 'application/json'}).text
-    starting_response = json.loads(the_response).get('hits').get('hits')[0].get('_source')
-    return starting_response
+    return get_one_search_result(data)
+
+
+@app.get("/movies/top_imdb")
+async def movies():
+    data = {
+        "query": {
+            "range" : {
+                "top_250_rank" : {
+                    "gte" : 1
+                }
+            }
+        }
+    }
+    return get_many_search_results(data)
+
+@app.get("/movies/trending")
+async def movies():
+    # data = {
+    #     "query": {
+    #         "range" : {
+    #             "top_popular_rank" : {
+    #                 "gte" : 1
+    #             }
+    #         }
+    #     }
+    # }
+    # return get_many_search_results(data)
+    return {"whatever": "cool"}
+
+
+@app.get("/something")
+async def something():
+    return {"whatever": "yes"}
+
+@app.get("/movies/genre/{genre}")
+async def movies(genre: str):
+    data = {
+        "query": {
+        "bool": {
+            "must": [{"term": {"genre_ranking.genre": genre}}, {"range": {"genre_ranking.ranking": {"gte": 1}}}]
+        }
+        }
+    }
+    return get_many_search_results(data)
 
